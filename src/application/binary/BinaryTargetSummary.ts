@@ -7,5 +7,6 @@ export const binaryTargetSummary = (target: BinaryTarget) => ({
   kind: target.kind,
   sha256: target.sha256,
   architecture: target.architecture ?? null,
+  ...(target.format === "s-record" ? { s_record: target.sRecord.summary } : {}),
   ...(target.format === "raw-binary" ? { entry_point: target.entryPoint } : {}),
 });

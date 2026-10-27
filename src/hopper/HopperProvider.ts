@@ -140,6 +140,13 @@ export class HopperProvider implements AnalysisProviderCandidate {
         reason: hopperDeclinedArchitectureReason(target.architecture),
         diagnostics,
       };
+    if (target.format === "s-record")
+      return {
+        status: "unsupported",
+        code: "target_format_unsupported",
+        reason: "S-record/RL78 requires the official IDA MCP adapter.",
+        diagnostics,
+      };
     if (target.format === "raw-binary")
       return {
         status: "unsupported",

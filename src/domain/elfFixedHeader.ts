@@ -11,7 +11,7 @@ export interface ElfFixedHeader {
   readonly machine: number;
   readonly architecture: Exclude<
     BinaryArchitecture,
-    RawOnlyArchitecture
+    RawOnlyArchitecture | "rl78"
   > | null;
 }
 
@@ -68,7 +68,7 @@ export const readElfFixedHeader = (
 
 const elfArchitecture = (
   machine: number,
-): Exclude<BinaryArchitecture, RawOnlyArchitecture> | undefined => {
+): Exclude<BinaryArchitecture, RawOnlyArchitecture | "rl78"> | undefined => {
   switch (machine) {
     case 3:
       return "x86";

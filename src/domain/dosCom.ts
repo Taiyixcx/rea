@@ -2,7 +2,11 @@ import { z } from "zod";
 import { err, ok, type Result } from "./result.js";
 
 /** Headerless executable interpretation explicitly selected by the caller. */
-export const executableFormatHintSchema = z.enum(["dos-com", "raw-binary"]);
+export const executableFormatHintSchema = z.enum([
+  "dos-com",
+  "raw-binary",
+  "s-record",
+]);
 /** Explicit executable interpretation for formats with no identifying header. */
 export type ExecutableFormatHint = z.infer<typeof executableFormatHintSchema>;
 

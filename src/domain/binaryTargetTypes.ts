@@ -12,6 +12,7 @@ export const BINARY_ARCHITECTURES = [
   "powerpc",
   "m68k",
   "hexagon",
+  "rl78",
 ] as const;
 export type BinaryArchitecture = (typeof BINARY_ARCHITECTURES)[number];
 
@@ -63,7 +64,7 @@ export const isElfMetadataArchitecture = (
 /** Recognized family with no ELF metadata member; the header alone is the fact. */
 export type HeaderArchitecture = Exclude<
   BinaryArchitecture,
-  ElfMetadataArchitecture | RawOnlyArchitecture | "hexagon"
+  ElfMetadataArchitecture | RawOnlyArchitecture | "hexagon" | "rl78"
 >;
 
 /** Raw ELF facts; family recognition does not establish ISA or ABI support. */
@@ -149,6 +150,15 @@ type ExecutableTarget = BinaryTargetIdentity & {
  * Each variant carries only metadata established for that exact file kind.
  */
 export type BinaryTarget =
+  | (BinaryTargetIdentity & {
+      readonly kind: "executable";
+      readonly format: "s-record";
+      readonly architecture: "rl78";
+      readonly availableArchitectures: readonly "rl78"[];
+      readonly sRecord: import("./sRecord.js").SRecordImage;
+      readonly executableRole?: never;
+      readonly managed?: never;
+    })
   | (BinaryTargetIdentity & {
       readonly kind: "executable";
       readonly format: "elf";

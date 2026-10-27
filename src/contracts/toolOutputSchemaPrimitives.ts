@@ -60,6 +60,7 @@ export const targetFormatSchema = z.enum([
   "dos-mz",
   "dos-com",
   "raw-binary",
+  "s-record",
   ...ZIP_PACKAGE_FORMATS,
   "asar",
   "dmg",

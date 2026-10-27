@@ -6,7 +6,7 @@ import {
 } from "../domain/dosCom.js";
 import type { BinaryArchitecture } from "../domain/binaryTargetTypes.js";
 import {
-  binaryArchitectureSchema,
+  loadArchitectureSchema,
   rawBinaryEntryPointSchema,
 } from "../domain/rawBinary.js";
 import { analysisProviderSelectorSchema } from "../contracts/providerSelection.js";
@@ -30,13 +30,13 @@ export const providerSelectionOption = analysisProviderSelectorSchema
 export const formatSelectionOption = executableFormatHintSchema
   .optional()
   .describe(
-    "Explicit headerless interpretation (dos-com or raw-binary); omission preserves header-based detection",
+    "Explicit interpretation (dos-com, raw-binary, or s-record); omission preserves header-based detection",
   );
 
-export const architectureSelectionOption = binaryArchitectureSchema
+export const architectureSelectionOption = loadArchitectureSchema
   .optional()
   .describe(
-    "Caller-supplied CPU family; required with --target-format raw-binary",
+    "Caller-supplied CPU family; s-record requires rl78, raw-binary requires a supported raw CPU",
   );
 
 export const entryPointSelectionOption = rawBinaryEntryPointSchema

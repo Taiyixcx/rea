@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sRecordSummarySchema } from "../domain/sRecord.js";
 import { byteSearchResultSchema } from "../domain/native/bytePattern.js";
 import {
   artifactInventorySummaryViewResultSchema,
@@ -467,10 +468,10 @@ const lifecycleTargetFields = {
 };
 const detectedLifecycleTargetSchema = z.object({
   ...lifecycleTargetFields,
-  format: targetFormatSchema.exclude(["raw-binary"]),
+  format: targetFormatSchema.exclude(["raw-binary", "s-record"]),
   architecture: z
     .enum(BINARY_ARCHITECTURES)
-    .exclude([...RAW_ONLY_ARCHITECTURES])
+    .exclude([...RAW_ONLY_ARCHITECTURES, "rl78"])
     .nullable(),
 });
 const rawLifecycleTargetSchema = z.object({
@@ -489,6 +490,13 @@ export const sessionOutputSchemas = {
     z.discriminatedUnion("format", [
       detectedLifecycleTargetSchema,
       rawLifecycleTargetSchema,
+      z.object({
+        ...lifecycleTargetFields,
+        format: z.literal("s-record"),
+        kind: z.literal("executable"),
+        architecture: z.literal("rl78"),
+        s_record: sRecordSummarySchema,
+      }),
     ]),
   ),
   close_binary: lifecycleResultOf(
