@@ -1,3 +1,4 @@
+import { IdaMcpRequestTimeoutError } from "./IdaMcpConnection.js";
 import { createHash } from "node:crypto";
 import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -345,6 +346,33 @@ describe("official IDA read-only compatibility session", () => {
 });
 
 describe("official IDA ownership, cleanup and cancellation", () => {
+  it("preserves and resolves cleanup ownership when cancellation arrives during failed recovery", () =>
+    withClient(async (client, fixture) => {
+      expect((await client.execute("health", {})).ok).toBe(true);
+      const controller = new AbortController();
+      const call = fixture.call.bind(fixture);
+      fixture.call = async (name, args) => {
+        const result = await call(name, args);
+        if (name === "close_database") controller.abort();
+        return result;
+      };
+      fixture.transportFault = true;
+      fixture.keepPath = true;
+      const result = await client.execute(
+        "procedure_assembly",
+        { procedure: "0x1000" },
+        { signal: controller.signal },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error._tag).toBe("AnalysisCancelledError");
+      expect(result.error.cleanupIncomplete).toBe(true);
+      expect(result.error.cleanupResources).toContain(dirname(fixture.input));
+      fixture.keepPath = false;
+      expect((await client.close()).ok).toBe(true);
+      expect(result.error.cleanupIncomplete).toBe(false);
+      expect(result.error.cleanupResources).toEqual([]);
+    }));
   it("does not close a foreign lease claimed by a bad open reply", () =>
     withClient(async (client, fixture) => {
       fixture.foreign = true;
@@ -439,6 +467,21 @@ describe("official IDA ownership, cleanup and cancellation", () => {
 });
 
 describe("official IDA request and recovery boundaries", () => {
+  it("requires verified close when an in-flight SDK timeout loses its response", () =>
+    withClient(async (client, fixture) => {
+      expect((await client.execute("health", {})).ok).toBe(true);
+      fixture.onQuery = (request) => {
+        if (request.operation === "strings")
+          throw new IdaMcpRequestTimeoutError("strings", 5000);
+      };
+      const result = await client.execute("list_strings", {});
+      expect(result.ok).toBe(false);
+      fixture.onQuery = undefined;
+      const before = fixture.queries.length;
+      expect((await client.execute("list_procedures", {})).ok).toBe(false);
+      expect(fixture.queries).toHaveLength(before);
+      expect((await client.close()).ok).toBe(true);
+    }));
   it("does not report success when cancellation arrives with final metadata", () =>
     withClient(async (client, fixture) => {
       expect((await client.execute("health", {})).ok).toBe(true);
@@ -477,8 +520,7 @@ describe("official IDA request and recovery boundaries", () => {
         fixture.onQuery = undefined;
         spy.mockRestore();
       }
-      expect((await client.execute("list_strings", {})).ok).toBe(false);
-      expect((await client.close()).ok).toBe(true);
+      expect((await client.execute("list_strings", {})).ok).toBe(true);
     }));
   it("transmits quoted and multiline selectors as JSON data", () =>
     withClient(async (client, fixture) => {

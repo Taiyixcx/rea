@@ -6,6 +6,7 @@ import {
   type AnalysisOperation,
   type ExecutionOptions,
 } from "../application/AnalysisProvider.js";
+import { analysisErrorWithCleanupFailure } from "../domain/analysisErrorCleanup.js";
 import { AnalysisError } from "../domain/analysisErrorBase.js";
 import {
   AnalysisCancelledError,
@@ -23,7 +24,10 @@ import { ProviderAdapterError } from "../domain/providerAdapterError.js";
 import { err, ok, type Result } from "../domain/result.js";
 import type { ProviderOperationHealth } from "../domain/providerOperationHealth.js";
 import type { IdaConfiguration } from "./IdaConfiguration.js";
-import type { IdaMcpConnection } from "./IdaMcpConnection.js";
+import {
+  IdaMcpRequestTimeoutError,
+  type IdaMcpConnection,
+} from "./IdaMcpConnection.js";
 import { parseIdaInput } from "./IdaInput.js";
 import {
   IDA_LIMITATIONS,
@@ -110,6 +114,7 @@ export class HexRaysSessionClient implements AnalysisClient {
   private initialIdentity: string | undefined;
   private environmentIdentity: string | undefined;
   private recoveryBlocked: AnalysisError | undefined;
+  private readonly cleanupFailures = new Set<AnalysisError>();
   private openAttempted = false;
   private openSettled = false;
   private leaseVerified = false;
@@ -518,19 +523,40 @@ export class HexRaysSessionClient implements AnalysisClient {
             continue;
           }
           this.recoveryBlocked = released.error;
-          cause
+          cause = analysisErrorWithCleanupFailure(
+            cause,
+            released.error,
+            operation,
+          )
             .bindCleanupDependencies([released.error])
             .bindCleanupResourceOwner(released.error);
         }
         // An SDK timeout drops the pending response, so subsequent reads must wait
         // for an explicit, verified close rather than racing the old Python call.
-        if (cause instanceof AnalysisTimeoutError && this.openAttempted)
+        if (cause instanceof IdaMcpRequestTimeoutError && this.openAttempted)
           this.recoveryBlocked = cause;
         this.transportUnavailable =
           cause instanceof ProviderAdapterError &&
           cause.operation === "transport";
         const failure = options?.signal?.aborted
-          ? new AnalysisCancelledError(operation, { cause })
+          ? new AnalysisCancelledError(operation, {
+              cause,
+              ...(cause instanceof AnalysisError
+                ? {
+                    capturedOutput: cause.capturedOutput,
+                    diagnostics: cause.diagnostics,
+                    partialObservation: cause.partialObservation,
+                    cleanup:
+                      cause.cleanup ??
+                      (cause.cleanupIncomplete
+                        ? {
+                            reason: cause.message,
+                            resources: cause.cleanupResources,
+                          }
+                        : undefined),
+                  }
+                : {}),
+            })
           : cause instanceof AnalysisError
             ? cause
             : new AnalysisOutputError(
@@ -538,6 +564,10 @@ export class HexRaysSessionClient implements AnalysisClient {
                 cause instanceof Error ? cause.message : String(cause),
                 { cause },
               );
+        if (failure !== cause && cause instanceof AnalysisError)
+          failure
+            .bindCleanupDependencies([cause])
+            .bindCleanupResourceOwner(cause);
         if (before !== undefined && this.raw.length > 0)
           failure.retainPartialObservation(
             createEvidence(this.target, HEX_RAYS_PROVIDER_IDENTITY, {
@@ -611,6 +641,14 @@ export class HexRaysSessionClient implements AnalysisClient {
     return this.closePending;
   }
 
+  private released(): void {
+    for (const failure of this.cleanupFailures) failure.resolveCleanup();
+    this.cleanupFailures.clear();
+    this.recoveryBlocked = undefined;
+    this.ready = false;
+    this.closed = true;
+  }
+
   private async verifyExitedTransport(): Promise<void> {
     const previous = this.connection;
     if (
@@ -640,9 +678,7 @@ export class HexRaysSessionClient implements AnalysisClient {
     this.releaseSettled = true;
     await this.connection.close();
     await this.workspace?.remove();
-    this.recoveryBlocked = undefined;
-    this.ready = false;
-    this.closed = true;
+    this.released();
   }
 
   private async release(
@@ -729,9 +765,7 @@ export class HexRaysSessionClient implements AnalysisClient {
       }
       await this.connection?.close();
       await this.workspace?.remove();
-      this.recoveryBlocked = undefined;
-      this.ready = false;
-      this.closed = true;
+      this.released();
       return ok(null);
     } catch (cause) {
       let failure = cause;
@@ -751,12 +785,12 @@ export class HexRaysSessionClient implements AnalysisClient {
         }
       }
       this.connection?.detach();
-      return err(
-        new HexRaysCleanupError(
-          this.workspace?.directory ?? "Official IDA MCP connection",
-          failure,
-        ),
+      const cleanup = new HexRaysCleanupError(
+        this.workspace?.directory ?? "Official IDA MCP connection",
+        failure,
       );
+      this.cleanupFailures.add(cleanup);
+      return err(cleanup);
     }
   }
 }

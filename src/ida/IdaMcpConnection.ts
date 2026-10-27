@@ -56,6 +56,9 @@ export interface IdaMcpConnection {
   detach(): void;
 }
 
+/** The SDK discarded a response for an actually dispatched request. */
+export class IdaMcpRequestTimeoutError extends AnalysisTimeoutError {}
+
 export type IdaMcpConnectionDependencies = Readonly<{
   createDiagnosticRedactor?: typeof createIdaDiagnosticRedactor;
 }>;
@@ -403,7 +406,11 @@ export const createIdaMcpConnection = (
       stderr_bytes: stderrBytes,
     };
     if (cause instanceof SdkError && cause.code === SdkErrorCode.RequestTimeout)
-      throw new AnalysisTimeoutError(operation, requestTimeoutMs, {
+      throw new (
+        config.protocol === "hex-rays"
+          ? IdaMcpRequestTimeoutError
+          : AnalysisTimeoutError
+      )(operation, requestTimeoutMs, {
         cause: failure,
         capturedOutput,
       });
