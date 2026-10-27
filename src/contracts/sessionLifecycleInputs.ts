@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 import { executableFormatHintSchema } from "../domain/dosCom.js";
 import { localPathStringSchema } from "../domain/localPath.js";
 import {
-  binaryArchitectureSchema,
+  loadArchitectureSchema,
   rawBinaryEntryPointSchema,
   rawBinarySelectionError,
 } from "../domain/rawBinary.js";
@@ -36,17 +36,17 @@ export const openBinaryInputSchema = z
     format: executableFormatHintSchema
       .optional()
       .describe(
-        "Explicit headerless interpretation: dos-com or raw-binary. Omission preserves header-based detection.",
+        "Explicit interpretation: dos-com, raw-binary, or s-record. Omission preserves header-based detection.",
       ),
-    architecture: binaryArchitectureSchema
+    architecture: loadArchitectureSchema
       .optional()
       .describe(
-        "Caller-supplied CPU family. Required with format=raw-binary; rejected otherwise.",
+        "Caller-supplied CPU family. Required with raw-binary or s-record; s-record requires rl78.",
       ),
     entry_point: rawBinaryEntryPointSchema
       .optional()
       .describe(
-        "Caller-supplied load and entry address (0xhex). File offset 0 is mapped here. Required with format=raw-binary; rejected otherwise.",
+        "Caller-supplied load and entry address (0xhex). File offset 0 is mapped here. Required with raw-binary or s-record; s-record requires rl78.",
       ),
     provider_id: analysisProviderSelectorSchema.optional(),
     snapshot_path: snapshotPathSchema.optional(),

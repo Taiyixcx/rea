@@ -21,6 +21,9 @@ export const BINARY_ARCHITECTURES = [
 /** Provider-neutral CPU family for a caller-supplied raw-binary load. */
 export const binaryArchitectureSchema = z.enum(BINARY_ARCHITECTURES);
 
+/** Explicit selector; each format separately admits its own CPU family. */
+export const loadArchitectureSchema = z.enum([...BINARY_ARCHITECTURES, "rl78"]);
+
 const RAW_BINARY_ENTRY_POINT = /^0x[0-9A-Fa-f]{1,16}$/u;
 
 /** Hexadecimal load and entry address; file offset 0 is mapped here. */
@@ -152,7 +155,13 @@ export const rawBinarySelectionError = (input: {
 }): string | undefined => {
   const hasArchitecture = input.architecture !== undefined;
   const hasEntry = input.entryPoint !== undefined;
+  if (input.format === "s-record") {
+    if (input.architecture !== "rl78" || hasEntry)
+      return "format=s-record requires architecture=rl78 and does not accept entry_point";
+    return undefined;
+  }
   if (input.format === "raw-binary") {
+    if (input.architecture === "rl78") return "raw-binary does not admit rl78";
     if (!hasArchitecture || !hasEntry)
       return "format=raw-binary requires architecture and entry_point";
     return undefined;

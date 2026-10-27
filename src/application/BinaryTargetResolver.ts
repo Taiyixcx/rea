@@ -1,3 +1,4 @@
+import { SRecordParser } from "../domain/sRecord.js";
 import { regularFileCancellation } from "../filesystem/OwnedRegularFile.js";
 import { constants, type Stats } from "node:fs";
 import { createHash } from "node:crypto";
@@ -148,6 +149,53 @@ export const parseBinaryTarget = async (
             constraint: "load_selection_rejected",
           }),
         );
+      if (formatHint === "s-record") {
+        if (targetKind !== undefined && targetKind !== "executable")
+          return err(
+            new BinaryTargetError(
+              path,
+              "S-record requires an executable target kind",
+              { constraint: "load_selection_rejected" },
+            ),
+          );
+        const parser = new SRecordParser(0xfffff);
+        const hash = createHash("sha256");
+        const chunk = Buffer.alloc(64 * 1024);
+        let position = 0;
+        for (;;) {
+          throwIfTargetResolutionCancelled(signal);
+          const read = await handle.read(chunk, 0, chunk.length, position);
+          if (read.bytesRead === 0) break;
+          const bytes = chunk.subarray(0, read.bytesRead);
+          hash.update(bytes);
+          parser.feed(bytes);
+          position += read.bytesRead;
+        }
+        if (
+          !sameRegularFileState(metadata, await handle.stat()) ||
+          position !== metadata.size
+        )
+          return err(
+            new BinaryTargetError(path, "S-record changed during admission"),
+          );
+        const decoded = parser.finish();
+        if (!decoded.ok)
+          return err(
+            new BinaryTargetError(path, decoded.error, {
+              constraint: "file_format_rejected",
+            }),
+          );
+        return ok({
+          path,
+          sourcePath,
+          sha256: hash.digest("hex"),
+          kind: "executable",
+          format: "s-record",
+          architecture: "rl78",
+          availableArchitectures: ["rl78"],
+          sRecord: decoded.value,
+        });
+      }
       if (formatHint === "dos-com") {
         if (targetKind !== undefined && targetKind !== "executable")
           return err(
@@ -302,6 +350,7 @@ const detectArtifactFormat = async (
       | "dos-mz"
       | "dos-com"
       | "raw-binary"
+      | "s-record"
     >
   | undefined
 > => {
