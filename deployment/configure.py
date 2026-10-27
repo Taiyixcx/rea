@@ -134,7 +134,8 @@ def main():
         wanted = {str(path.relative_to(skill)): digest(path) for path in skill.rglob("*") if path.is_file()}
         actual = {str(path.relative_to(output / "rea-skill")): digest(path)
                   for path in (output / "rea-skill").rglob("*") if path.is_file()}
-        require(wanted == actual and (output / "validation").is_dir(), "Existing output is incomplete or changed")
+        require(wanted == actual and all((output / name).is_dir() for name in
+                ("validation", "state/rea", "state/native")), "Existing output is incomplete or changed")
         print(json.dumps({"state": host["state"], "output": str(output), "changed": False}))
         return
     output.mkdir(parents=True, mode=0o700)
@@ -143,7 +144,8 @@ def main():
             stream.write(text)
         (output / name).chmod(0o600)
     shutil.copytree(ROOT / "skills/reverse-engineer-anything", output / "rea-skill")
-    (output / "validation").mkdir(mode=0o700)
+    for name in ("validation", "state/rea", "state/native"):
+        (output / name).mkdir(parents=True, mode=0o700)
     print(json.dumps({"state": host["state"], "output": str(output), "changed": True,
                       "client_configuration_written": False, "target_loaded": False}))
 
