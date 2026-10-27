@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "scope": "software-only Linux x86_64 deployment; no target data or target-derived acceptance results",
+  "source_repository": "https://github.com/Taiyixcx/rea.git",
+  "source_branch": "experiment/rl78",
+  "analysis_core_reference": "1cc2437547dfdbe6a1efac7a9f9d35bcbcd3db28",
+  "package_version": "6.7.0",
+  "node_version": "v24.18.0",
+  "npm_version": "11.16.0",
+  "python_version": "3.13.16",
+  "ida_kernel_version": "9.5",
+  "python_packages": {
+    "ida-mcp": "20261008.0.1",
+    "ida-nexus": "0.13.4",
+    "ida-domain": "0.5.1",
+    "idapro": "0.0.10"
+  },
+  "runtime_tree_sha256": "df063373f5c1cd374125975705c0f485ebc81d7096ebf5e04ff6ed2fc17bc1a7",
+  "query_sha256": "45304712373221ad1362cb6f3523a31309e891c7a10694ffe0349d8f4c545e89",
+  "skill_sha256": "69a5f1ff7af07c44f7d2718de70a4373fb0818bbb6899ebf37fcbb6c72d38a7d"
+}
