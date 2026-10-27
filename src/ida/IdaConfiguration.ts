@@ -6,7 +6,7 @@ import { err, ok, type Result } from "../domain/result.js";
 
 const common = {
   mode: z.enum(["attached", "headless"]).default("attached"),
-  protocol: z.literal("native").optional(),
+  protocol: z.enum(["native", "hex-rays"]).optional(),
   timeoutMs: z.number().int().positive().max(2_147_483_647).default(300_000),
   workspaceRoot: z
     .string()
@@ -44,6 +44,21 @@ const registrationSchema = z
   .refine(
     (config) => config.protocol !== "native" || config.mode === "attached",
     "The native IDA MCP protocol requires attached mode",
+  )
+  .refine(
+    (config) =>
+      config.protocol !== "hex-rays" ||
+      (config.mode === "headless" && "command" in config),
+    "The hex-rays protocol requires headless mode and stdio transport",
+  )
+  .refine(
+    (config) =>
+      config.protocol !== "hex-rays" ||
+      !("args" in config) ||
+      !config.args.some(
+        (arg) => arg === "--database" || arg.startsWith("--database="),
+      ),
+    "The hex-rays profile cannot pre-open a startup database; REA owns its input selection",
   );
 
 /** An upstream MCP registration plus REA's database lifecycle selection. */

@@ -31,13 +31,21 @@ import { ProviderAdapterError } from "../domain/providerAdapterError.js";
 
 /** Injectable MCP boundary used by the provider and transport conformance tests. */
 export interface IdaMcpConnection {
-  connect(): Promise<readonly string[]>;
+  connect(options?: {
+    readonly timeoutMs?: number | undefined;
+    readonly signal?: AbortSignal | undefined;
+  }): Promise<readonly string[]>;
   call(
     name: string,
     args: Readonly<Record<string, JsonValue>>,
-    options?: { readonly timeoutMs?: number | undefined },
+    options?: {
+      readonly timeoutMs?: number | undefined;
+      readonly signal?: AbortSignal | undefined;
+    },
   ): Promise<JsonValue>;
   readResource?(uri: string): Promise<JsonValue>;
+  /** Positive exit observation of this transport's own spawned process, never a PID lookup. */
+  ownedProcessExited?(): boolean;
   serverInfo(): JsonValue;
   close(): Promise<void>;
   /**
@@ -87,7 +95,7 @@ const parseIdaJsonText = (text: string): JsonValue => {
 /** Decode Python FastMCP's scalar wrapper without dropping structured dictionaries. */
 export const decodeIdaToolResult = (
   input: unknown,
-  protocol?: "native",
+  protocol?: "native" | "hex-rays",
   diagnostic: IdaDiagnosticRedactor = createIdaDiagnosticRedactor(),
 ): JsonValue => {
   const result = toolResultSchema.parse(input);
@@ -345,6 +353,7 @@ export const createIdaMcpConnection = (
   const redactor = (
     dependencies.createDiagnosticRedactor ?? createIdaDiagnosticRedactor
   )(config);
+  let ownedProcess: ChildProcess | undefined;
   let stderr = Buffer.alloc(0);
   let stderrBytes = 0;
   const transportFailure = (
@@ -406,6 +415,12 @@ export const createIdaMcpConnection = (
         { max_response_bytes: Number(bufferLimit[1]) },
         { cause, capturedOutput },
       );
+    if (config.protocol === "hex-rays")
+      throw new ProviderAdapterError("ida", "transport", {
+        cause: failure,
+        diagnostics: { reason: failure.message },
+        capturedOutput,
+      });
     if (stderrBytes === 0) throw failure;
     throw new ProviderAdapterError("ida", "transport", {
       cause: failure,
@@ -449,13 +464,36 @@ export const createIdaMcpConnection = (
       );
     });
   return {
-    async connect() {
+    async connect(options) {
+      const budget = Math.min(
+        config.timeoutMs,
+        options?.timeoutMs ?? config.timeoutMs,
+      );
+      const started = performance.now();
       await client
-        .connect(transport, { timeout: config.timeoutMs })
+        .connect(transport, {
+          timeout: budget,
+          ...(config.protocol === "hex-rays" || options?.signal === undefined
+            ? {}
+            : { signal: options.signal }),
+        })
         .catch((cause: unknown) => transportFailure(cause, "ida_mcp_connect"));
+      if (transport instanceof StdioClientTransport) {
+        const child: unknown = Reflect.get(transport, "_process");
+        if (child instanceof ChildProcess) ownedProcess = child;
+      }
+      const remaining =
+        options === undefined
+          ? config.timeoutMs
+          : Math.ceil(budget - (performance.now() - started));
+      if (remaining <= 0)
+        throw new AnalysisTimeoutError("ida_mcp_catalog", budget);
       const catalog = await client
         .listTools(undefined, {
-          timeout: config.timeoutMs,
+          timeout: remaining,
+          ...(config.protocol === "hex-rays" || options?.signal === undefined
+            ? {}
+            : { signal: options.signal }),
         })
         .catch((cause: unknown) => transportFailure(cause, "ida_mcp_catalog"));
       return catalog.tools.map(({ name }) => name);
@@ -467,7 +505,16 @@ export const createIdaMcpConnection = (
       );
       return decodeIdaToolResult(
         await client
-          .callTool({ name, arguments: args }, { timeout: requestTimeoutMs })
+          .callTool(
+            { name, arguments: args },
+            {
+              timeout: requestTimeoutMs,
+              ...(config.protocol === "hex-rays" ||
+              options?.signal === undefined
+                ? {}
+                : { signal: options.signal }),
+            },
+          )
           .catch((cause: unknown) =>
             transportFailure(cause, name, requestTimeoutMs),
           ),
@@ -496,6 +543,9 @@ export const createIdaMcpConnection = (
         .parse(response);
       return parseIdaJsonText(resource.contents[0]?.text ?? "");
     },
+    ownedProcessExited: () =>
+      ownedProcess !== undefined &&
+      (ownedProcess.exitCode !== null || ownedProcess.signalCode !== null),
     serverInfo: () => jsonValueSchema.parse(client.getServerVersion() ?? null),
     close: () => client.close().catch(transportFailure),
     detach() {

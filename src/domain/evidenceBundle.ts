@@ -16,7 +16,7 @@ import {
 } from "./residualUnknown.js";
 import { freezeJsonSnapshot } from "./immutableJson.js";
 
-const [detectedSubjectSchema, rawSubjectSchema] =
+const [sRecordSubjectSchema, detectedSubjectSchema, rawSubjectSchema] =
   evidenceSchema.shape.subject.unwrap().options;
 const manifestFields = {
   digest: true,
@@ -26,6 +26,7 @@ const manifestFields = {
 const artifactManifestSchema = z.discriminatedUnion("format", [
   detectedSubjectSchema.pick(manifestFields),
   rawSubjectSchema.pick(manifestFields),
+  sRecordSubjectSchema.pick(manifestFields),
 ]);
 const providerManifestSchema = providerSchema;
 const environmentManifestSchema = evidenceSchema.shape.environment.unwrap();

@@ -484,19 +484,21 @@ const rawLifecycleTargetSchema = z.object({
   ),
 });
 
+const sRecordLifecycleTargetSchema = z.object({
+  ...lifecycleTargetFields,
+  format: z.literal("s-record"),
+  kind: z.literal("executable"),
+  architecture: z.literal("rl78"),
+  s_record: sRecordSummarySchema,
+});
+
 /** Exact structured-content schemas for target lifecycle operations. */
 export const sessionOutputSchemas = {
   open_binary: lifecycleResultOf(
     z.discriminatedUnion("format", [
       detectedLifecycleTargetSchema,
       rawLifecycleTargetSchema,
-      z.object({
-        ...lifecycleTargetFields,
-        format: z.literal("s-record"),
-        kind: z.literal("executable"),
-        architecture: z.literal("rl78"),
-        s_record: sRecordSummarySchema,
-      }),
+      sRecordLifecycleTargetSchema,
     ]),
   ),
   close_binary: lifecycleResultOf(
@@ -535,6 +537,10 @@ export const sessionOutputSchemas = {
       sessionProvider.extend({
         open: z.literal(true),
         ...rawLifecycleTargetSchema.shape,
+      }),
+      sessionProvider.extend({
+        open: z.literal(true),
+        ...sRecordLifecycleTargetSchema.shape,
       }),
     ]),
   ),

@@ -87,3 +87,41 @@ describe("IDA registration and MCP result boundaries", () => {
     expect(() => decodeIdaToolResult({ content: "invalid" })).toThrow();
   });
 });
+
+it("accepts only an explicit headless stdio official profile without startup targets", async () => {
+  const { root } = await createIdaTarget();
+  roots.push(root);
+  const path = join(root, "official.json");
+  for (const selection of [
+    {
+      command: "ida-mcp",
+      args: ["stdio"],
+      mode: "headless",
+      protocol: "hex-rays",
+    },
+    {
+      command: "ida-mcp",
+      args: ["stdio"],
+      mode: "attached",
+      protocol: "hex-rays",
+    },
+    {
+      url: "http://127.0.0.1:8737/mcp",
+      mode: "headless",
+      protocol: "hex-rays",
+    },
+    {
+      command: "ida-mcp",
+      args: ["stdio", "--database", "/tmp/user.elf"],
+      mode: "headless",
+      protocol: "hex-rays",
+    },
+  ]) {
+    await writeFile(path, JSON.stringify(selection));
+    expect(readIdaConfiguration(path).ok).toBe(
+      "command" in selection &&
+        selection.mode === "headless" &&
+        !selection.args?.includes("--database"),
+    );
+  }
+});

@@ -19,6 +19,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 const { values } = parseArgs({
   options: {
     target: { type: "string" },
+    fixture: { type: "boolean" },
+    "target-format": { type: "string" },
+    architecture: { type: "string" },
+    "pseudocode-expectation": { type: "string" },
+    "all-functions": { type: "boolean" },
+    "duration-seconds": { type: "string" },
     procedure: { type: "string", default: "rea_fixture_add" },
     "second-procedure": { type: "string" },
     "second-marker": { type: "string" },
@@ -28,7 +34,10 @@ const { values } = parseArgs({
     report: { type: "string" },
   },
 });
-if (values.target === undefined || process.env.REA_IDA_MCP_CONFIG === undefined)
+if (
+  (values.target === undefined && !values.fixture) ||
+  process.env.REA_IDA_MCP_CONFIG === undefined
+)
   throw new Error(
     "IDA verification requires --target and REA_IDA_MCP_CONFIG; see docs/ida-provider.md. No toolchain is installed by this lane.",
   );
@@ -45,7 +54,7 @@ if (values["expected-string"] === "" || values["expected-xref"] === "")
 const packageRoot = resolve(
   values["package-root"] ?? fileURLToPath(new URL("..", import.meta.url)),
 );
-const target = resolve(values.target);
+const target = resolve(values.target ?? ".");
 const entry = join(packageRoot, "scripts", "rea.mjs");
 const importBuilt = (path) =>
   import(pathToFileURL(join(packageRoot, "dist", path)).href);
@@ -67,6 +76,32 @@ const [
 const registration = readIdaConfiguration(process.env.REA_IDA_MCP_CONFIG);
 if (!registration.ok) throw registration.error;
 const config = registration.value;
+if (config.protocol === "hex-rays") {
+  const { verifyHexRaysIda } = await import("./lib/hex-rays-verifier.mjs");
+  const selectedValues = {
+    ...values,
+    procedure: process.argv.includes("--procedure")
+      ? values.procedure
+      : undefined,
+  };
+  const environment = Object.fromEntries(
+    Object.entries({
+      ...process.env,
+      REA_ANALYSIS_PROVIDER: "ida",
+      REA_LOG_LEVEL: "error",
+    }).filter(([, value]) => value !== undefined),
+  );
+  await verifyHexRaysIda({
+    packageRoot,
+    config,
+    environment,
+    values: selectedValues,
+  });
+  process.exit(0);
+}
+if (values.fixture)
+  throw new Error("The RL78 fixture lane requires protocol=hex-rays");
+
 if (
   config.protocol === "native" &&
   (values["second-procedure"] === undefined ||

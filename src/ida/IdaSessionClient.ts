@@ -343,19 +343,19 @@ export class IdaSessionClient implements AnalysisClient {
   }
 
   #runner(options: ExecutionOptions | undefined): IdaOperationRunner {
-    return new IdaOperationRunner(
-      this.connection,
-      idaProtocol(this.config),
-      this.#database,
-      {
-        signal: options?.signal,
-        selectorOrigin: options?.selectorOrigin,
-        x86Only: isX86OnlyTarget(this.target),
-        callGraphAvailable: this.#callGraphAdvertised,
-        surveyAvailable: this.#surveyAdvertised,
-        admittedDocument: this.target.path,
-      },
-    );
+    const protocol = idaProtocol(this.config);
+    if (protocol === "hex-rays")
+      throw new AnalysisProtocolError(
+        "The official protocol requires HexRaysSessionClient",
+      );
+    return new IdaOperationRunner(this.connection, protocol, this.#database, {
+      signal: options?.signal,
+      selectorOrigin: options?.selectorOrigin,
+      x86Only: isX86OnlyTarget(this.target),
+      callGraphAvailable: this.#callGraphAdvertised,
+      surveyAvailable: this.#surveyAdvertised,
+      admittedDocument: this.target.path,
+    });
   }
 
   #health(metadata: JsonValue) {

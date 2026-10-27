@@ -11,6 +11,7 @@ export async function verifyPackedBridge({ tarball, packedFiles }) {
   for (const path of [
     packedHopperBridge,
     packedCutterBridge,
+    "package/bridge/ida/rea_ida_queries.py",
     ...Object.values(GHIDRA_BRIDGE_SOURCES).map(
       (name) => `package/bridge/ghidra/${name}`,
     ),

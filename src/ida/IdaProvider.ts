@@ -1,3 +1,5 @@
+import { HexRaysSessionClient } from "./HexRaysSessionClient.js";
+import { hexRaysQueryDigest } from "./HexRaysQueries.js";
 import { snapshotEnvironment } from "../process/snapshotEnvironment.js";
 import { createAnalysisProfile } from "../domain/analysisProfile.js";
 import type { AnalysisProfileCommitment } from "../domain/analysisProfile.js";
@@ -31,6 +33,7 @@ import {
 import {
   idaCapabilities,
   IDA_PROVIDER_IDENTITY,
+  HEX_RAYS_PROVIDER_IDENTITY,
 } from "./IdaProviderCapabilities.js";
 import { IdaSessionClient } from "./IdaSessionClient.js";
 import { privateRuntimeRootCapability } from "../process/PrivateRuntimeRoot.js";
@@ -51,7 +54,10 @@ export class IdaProvider implements AnalysisProviderCandidate {
   }
 
   identity() {
-    return IDA_PROVIDER_IDENTITY;
+    const config = this.#configuration();
+    return config.ok && config.value.protocol === "hex-rays"
+      ? HEX_RAYS_PROVIDER_IDENTITY
+      : IDA_PROVIDER_IDENTITY;
   }
   capabilities() {
     const config = this.#configuration();
@@ -59,6 +65,7 @@ export class IdaProvider implements AnalysisProviderCandidate {
       config.ok ? config.value.mode : "attached",
       config.ok && "command" in config.value,
       config.ok && config.value.protocol === "native",
+      config.ok && config.value.protocol === "hex-rays",
     );
   }
   inspectAvailability(): ProviderAvailability {
@@ -136,6 +143,18 @@ export class IdaProvider implements AnalysisProviderCandidate {
           "IDA MCP integration admits executable inputs, not analysis databases. Select the original input binary.",
         diagnostics,
       };
+    if (target.format === "s-record") {
+      const config = this.#configuration();
+      return config.ok && config.value.protocol === "hex-rays"
+        ? { status: "supported", code: null, reason: null, diagnostics }
+        : {
+            status: "unsupported",
+            code: "target_format_unsupported",
+            reason:
+              "S-record/RL78 requires protocol=hex-rays with a headless stdio registration.",
+            diagnostics,
+          };
+    }
     if (target.format === "raw-binary")
       return {
         status: "unsupported",
@@ -162,7 +181,7 @@ export class IdaProvider implements AnalysisProviderCandidate {
     return { status: "supported", code: null, reason: null, diagnostics };
   }
   async resolveAnalysisProfile(
-    _target: BinaryTarget,
+    target: BinaryTarget,
     options?: AnalysisProfileResolutionOptions,
   ) {
     if (options?.signal?.aborted === true)
@@ -170,19 +189,31 @@ export class IdaProvider implements AnalysisProviderCandidate {
     const config = this.#configuration();
     if (!config.ok) return config;
     return ok({
-      profile: createAnalysisProfile(IDA_PROVIDER_IDENTITY, {
+      profile: createAnalysisProfile(this.identity(), {
         version_scope: "rea-ida-adapter",
         engine_version: null,
         upstream_distribution_version: null,
         mode: config.value.mode,
         compatibility_profile:
-          config.value.protocol === "native"
-            ? "native-ida-mcp"
-            : config.value.mode === "attached"
-              ? "legacy-1.4"
-              : "database-supervisor",
+          config.value.protocol === "hex-rays"
+            ? "hex-rays-headless-v1"
+            : config.value.protocol === "native"
+              ? "native-ida-mcp"
+              : config.value.mode === "attached"
+                ? "legacy-1.4"
+                : "database-supervisor",
         database_revision: null,
         cache_policy: "live",
+        ...(config.value.protocol === "hex-rays"
+          ? { query_implementation_sha256: hexRaysQueryDigest() }
+          : {}),
+        ...(target.format === "s-record"
+          ? {
+              import_format: "s-record",
+              architecture: "rl78",
+              s_record: target.sRecord.summary,
+            }
+          : {}),
         registration_digest: createHash("sha256")
           .update(canonicalize(config.value) ?? "")
           .digest("hex"),
@@ -199,6 +230,14 @@ export class IdaProvider implements AnalysisProviderCandidate {
         execute: async () => err(config.error),
         close: async () => ok(null),
       };
+    if (config.value.protocol === "hex-rays")
+      return new HexRaysSessionClient(
+        config.value,
+        target,
+        this.environment,
+        this.connectionFactory,
+        profile,
+      );
     return new IdaSessionClient(
       config.value,
       target,

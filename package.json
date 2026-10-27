@@ -95,7 +95,8 @@
     "bridge/pwndbg/core_context.py",
     "third_party/pwndbg/README.md",
     "third_party/pwndbg/LICENSE.md",
-    "licenses"
+    "licenses",
+    "bridge/ida/rea_ida_queries.py"
   ],
   "scripts": {
     "release:notes": "node scripts/release-notes.mjs",
@@ -194,6 +195,7 @@
     "verify:ghidra:mips-relocatable": "npm run build:cached && node scripts/verify-real-ghidra-mips-relocatable.mjs",
     "verify:ghidra:swift": "npm run build:cached && node scripts/verify-real-ghidra-swift.mjs",
     "verify:ida": "npm run build:cached && node scripts/verify-real-ida.mjs",
+    "verify:ida:recovery": "npm run build:cached && node scripts/verify-ida-recovery.mjs",
     "verify:ghidra:switch": "npm run build:cached && node scripts/verify-real-ghidra-switch.mjs",
     "verify:kuna": "npm run build:cached && node scripts/verify-real-kuna.mjs",
     "verify:ghidra:dos": "npm run build:cached && node scripts/verify-real-ghidra-dos.mjs",

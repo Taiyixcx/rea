@@ -46,7 +46,7 @@ export const openBinaryInputSchema = z
     entry_point: rawBinaryEntryPointSchema
       .optional()
       .describe(
-        "Caller-supplied load and entry address (0xhex). File offset 0 is mapped here. Required with raw-binary or s-record; s-record requires rl78.",
+        "Caller-supplied load and entry address (0xhex). File offset 0 is mapped here. Required only with raw-binary; s-record rejects entry_point and preserves record addresses.",
       ),
     provider_id: analysisProviderSelectorSchema.optional(),
     snapshot_path: snapshotPathSchema.optional(),
@@ -65,13 +65,17 @@ export const openBinaryInputSchema = z
     context.addIssue({
       code: "custom",
       path:
-        value.format === "raw-binary"
-          ? value.architecture === undefined
+        value.format === "s-record"
+          ? value.architecture !== "rl78"
             ? ["architecture"]
             : ["entry_point"]
-          : value.architecture === undefined
-            ? ["entry_point"]
-            : ["architecture"],
+          : value.format === "raw-binary"
+            ? value.architecture === undefined
+              ? ["architecture"]
+              : ["entry_point"]
+            : value.architecture === undefined
+              ? ["entry_point"]
+              : ["architecture"],
       message: pairing,
     });
   });
