@@ -1,21 +1,22 @@
 # IDA provider
 
-REA adapts an existing IDA MCP server into its native analysis tools. Existing IDA Pro profiles use [mrexodia/ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp); an optional native bridge for IDA Pro and IDA Free is described below. Install and configure your selected engine and upstream MCP using their instructions. REA does not install, upgrade, activate, or license them, and does not bundle another IDA server.
+REA adapts an existing IDA MCP server into its native analysis tools. The explicit `hex-rays` profile connects to Hex-Rays' official `ida-mcp`. Existing IDA Pro registrations continue to use [mrexodia/ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp); an optional native bridge for IDA Pro and IDA Free is described below. Install and configure your selected engine and upstream MCP using their instructions. REA does not install, upgrade, activate, or license them, and does not bundle another IDA server.
 
 Choose one lifecycle mode in an upstream MCP JSON registration. Set `REA_IDA_MCP_CONFIG` to that file, then select `ida` once through `REA_ANALYSIS_PROVIDER`, the CLI's `--provider ida`, or MCP's `open_binary.provider_id`. No provider startup occurs during discovery.
 
 ## Supported upstream versions
 
-Each mode accepts one upstream tool profile, checked against `tools/list` before any analysis runs. The attached profile requires the legacy GUI tool names; upstream 2.0.0 renamed those tools, and REA has not established an equivalent attached-mode lifecycle and ownership contract for that catalog. It therefore fails closed with the missing tool names in the error diagnostics.
+Each profile is checked against `tools/list` before any analysis runs. The attached profile requires the legacy GUI tool names; upstream 2.0.0 renamed those tools, and REA has not established an equivalent attached-mode lifecycle and ownership contract for that catalog. It therefore fails closed with the missing tool names in the error diagnostics.
 
 Startup failures identify the accepted REA analysis operation. Missing-profile and typed startup transport failures retain the original stage in `details.diagnostics.startup_operation`; existing diagnostics, timeout budgets and resource limits remain available. Startup remains shared within a session; each caller receives its own operation attribution. Cancellation retains live cleanup ownership, so a successful retry releases the originating cancellation outcome as well.
 
 The headless profile is defined by the database-supervisor API, not by an upstream version string. The upstream source snapshot [`c133c385`](https://github.com/mrexodia/ida-pro-mcp/tree/c133c3853faa111a9b00ee615c013b720d0c4acd) includes `idb_close` (introduced by [upstream PR #495](https://github.com/mrexodia/ida-pro-mcp/pull/495)) alongside `idb_open` and `idb_list`. Earlier builds may report the same `2.0.0` version while lacking that tool, so REA checks the live catalog rather than treating a version number or branch name as a compatibility guarantee.
 
-| Mode     | Upstream profile    | Known working                                          |
-| -------- | ------------------- | ------------------------------------------------------ |
-| attached | legacy GUI tools    | 1.4.0                                                  |
-| headless | database supervisor | builds serving `idb_open`, `idb_list`, and `idb_close` |
+| Mode                             | Upstream profile          | Known working                                                               |
+| -------------------------------- | ------------------------- | --------------------------------------------------------------------------- |
+| attached                         | legacy GUI tools          | 1.4.0                                                                       |
+| headless                         | database supervisor       | builds serving `idb_open`, `idb_list`, and `idb_close`                      |
+| headless, `protocol: "hex-rays"` | official `ida-mcp`, stdio | local compatibility qualification targets `20261008.0.1` with Linux IDA 9.5 |
 
 ## Analyze an already-open GUI target
 
@@ -72,6 +73,66 @@ Native MCP 1.1.2 can navigate in the previously focused pseudocode tab when swit
 Native tool observations retain actual tool names and complete JSON text. Upstream `structuredContent` can be a shortened preview even while text contains the full result. REA reads the full native representation and rejects missing/malformed text instead of treating previews as complete observations.
 
 The legacy producer moves the active GUI as a side effect: assembly and raw function instructions jump to the function, and successful pseudocode opens or reuses a pseudocode view. A function dossier does both. Native GUI decompilation also changes the active view. `binary_session` reports these operations with `effects.may_show_ui: true`; headless operations and the other attached operations report `false`.
+
+## Official Hex-Rays MCP
+
+Select this profile explicitly; omitting `protocol` retains the existing legacy or database-supervisor meaning. It accepts headless stdio only. Use the executable from your own official `ida-mcp` installation:
+
+```json
+{
+  "command": "/absolute/path/to/venv/bin/ida-mcp",
+  "args": ["stdio", "--agent=rea"],
+  "mode": "headless",
+  "protocol": "hex-rays",
+  "timeoutMs": 300000,
+  "env": {
+    "IDADIR": "/absolute/path/to/ida-pro-9.5"
+  }
+}
+```
+
+Do not supply a startup `--database` argument. REA creates a digest-verified private input copy and isolated MCP/Nexus state, requests an idalib lease with `open_database`, and binds every query to the returned `instance_id`. It checks the live tool catalog, reads `reference`, waits for automatic analysis through opening, and verifies input, private database path and processor around analysis. It never adopts an already-open GUI database. Official MCP may flush or save its **private working database** to disk; the original input remains unchanged.
+
+The adapter invokes only the packaged, versioned read-only query implementation through `execute_python`. Parameters are JSON data, not executable user text. Functions, strings, assembly, incoming xrefs, recognized direct callees, pseudocode and address containment use that fixed implementation. This adds no public arbitrary Python forwarding, memory-reading, annotation or execution tool. Raw Evidence retains request parameters, query/code digests and upstream replies; the analysis profile includes the query implementation digest and protocol version. Engine and installed dependency versions are separate observed metadata.
+
+### Explicit S-record / RL78 input
+
+This compatibility lane requires both format and architecture:
+
+```json
+{
+  "name": "open_binary",
+  "arguments": {
+    "path": "/absolute/path/to/input.s19",
+    "format": "s-record",
+    "architecture": "rl78",
+    "provider_id": "ida"
+  }
+}
+```
+
+The corresponding CLI selection is:
+
+```bash
+rea function /absolute/path/to/input.s19 0x100 \
+  --target-format s-record --architecture rl78 --provider ida --json
+```
+
+Use a procedure from the current function inventory in place of the illustrative address. Format and CPU are never inferred from the extension. This lane does not admit RL78 as a raw-binary, ELF or PE architecture. Other unqualified providers reject this target rather than switching engines.
+
+The streaming parser validates S0/S1/S2/S3/S5/S6/S7/S8/S9 records, lengths, hexadecimal data, checksums, address bounds and optional counts. Records may be out of order or sparse; identical duplicate bytes merge, while conflicts fail. Counts may be absent. Ambiguous multiple count blocks and contradictory start declarations fail. Data and a declared start must fit RL78's 20-bit address space. The S7/S8/S9 declaration remains a file fact, including zero; it is not a confirmed function entry and does not relocate the image. `entry_point` retains its raw-binary meaning and is rejected for S-record.
+
+Carrier SHA-256, parser version, normalized source ranges and mapping digest identify the admitted interpretation across lifecycle output, Evidence and snapshots. Text file offsets and memory addresses are distinct. IDA's native loader receives the private original S-record with `processor=rl78`. Loading verifies each source interval's bytes and sparse gaps; automatically created RAM/SFR segments are recorded separately from source data. A changed mapping or query implementation cannot reuse a mismatched analysis profile or snapshot.
+
+### Partial results, recovery and closing
+
+A function dossier collects assembly, pseudocode and callees separately. Missing decompiler support returns pseudocode as unavailable in `facet_availability`, with its reason, while preserving valid assembly and relationships. A recoverable facet query failure likewise preserves the other verified facets. Empty unavailable facets mean unknown; successful empty observations have a different availability state. Malformed replies, contradictory identities, cancellation and transport faults remain explicit errors. A failed function request does not disable the next function request or terminate REA's MCP service.
+
+All child queries and advancing pages share the operation's absolute deadline. Once an official request has started, cancellation waits for its bounded upstream response before releasing the serial queue; an SDK abort is not a completion receipt. A timeout blocks further reads until an explicit verified close, while retained Evidence remains exportable. The adapter permits at most one read-only retry after a transport fault, and only after the prior request/owned transport and database release can be verified. It then rechecks input and engine identity before continuing. A lost transport or missing instance ID alone is insufficient proof of release. A positively observed owned MCP process exit can trigger a discovery-only connection in the same private namespace to verify that no worker retains the private path; that connection never opens a database. Ambiguous cleanup retains ownership, files and diagnostics for a later close retry. REA does not kill an arbitrary PID to claim recovery.
+
+Recovery keeps the enclosing session's Evidence ledger. Work in batches: retain each completed result, periodically call `export_evidence_bundle` to a caller-selected absolute path, then export once more before `close_binary`. Already retained Evidence can be inspected or exported when the engine is unavailable. A failed or cancelled operation can also retain explicitly partial observations; those do not prove a complete, post-verified result. Keep the original error and cleanup status in the investigation record. Do not repeatedly reopen or repeat the same failing request without a changed condition.
+
+`close_binary` closes only the held private lease with `close_database`, then checks `list_databases` for both the instance ID and private input/database paths. An ID disappearing before an upstream close error does not establish successful cleanup. Files are removed only after verified release; a cleanup failure retains the workspace and can be retried.
 
 ## Give REA a target for headless analysis
 
@@ -143,7 +204,7 @@ All profiles support procedure/string inventory and literal or regex search, pro
 
 All profiles expose `list_documents` as the single target admitted for the session. Attached mode verifies its digest against IDA metadata before returning it; headless mode binds the digest-checked private input. `inspect_address_context`, `trace_feature`, and `binary_overview` can therefore resolve that identity without upstream document-listing tools. Segment enumeration is optional: when the selected profile cannot provide it, `binary_overview` still returns document and procedure/string counts and omits `segments` and `segment_count`; omission means unobserved, not empty. The modern headless profile also supports `resolve_containing_procedure`. An address resolves through upstream `lookup_funcs` to the canonical entry of the function that contains it; the body stays unavailable like other IDA identities. When no function contains it, REA reads the database-scoped minimal `survey_binary` and reports `not_in_procedure` for an address inside one of its segments (ends are exclusive) and `outside_segments` otherwise. A missing, truncated or inconsistent survey fails the read instead of guessing a reason. `trace_feature` marks a trace truncated, with a residual unknown for that address, when upstream caps the references it returned. Attached profiles do not declare address containment resolution.
 
-The legacy profile additionally supports direct callers. Its producer may report call-site or interior addresses; REA resolves the reported function symbol to its canonical entry. The modern and native profiles do not prove direct callers from its code/data xref labels, so that capability is unavailable and the dossier marks it unknown.
+The legacy profile additionally supports direct callers. Its producer may report call-site or interior addresses; REA resolves the reported function symbol to its canonical entry. The modern, native and official profiles do not prove direct callers from their code/data xref labels, so that capability is unavailable and the dossier marks it unknown.
 
 Complete body ranges, typed reference edges, CFG, referenced data, source locals, comment kinds, and database revision are unavailable. Empty unsupported dossier facets mean **unknown**, not observed absence. Whole-symbol inventory, mutation, debugging, arbitrary Python forwarding, and requested GUI navigation are outside this adapter's coverage. Check session availability before composing a workflow that needs those facets.
 
@@ -153,10 +214,22 @@ Complete body ranges, typed reference edges, CFG, referenced data, source locals
 
 Run `npm run verify:ida -- --target /absolute/path/to/program --procedure main` with a configured upstream server. It exercises production CLI and MCP tools, validates their output contracts and Evidence, checks original-input preservation and session cleanup, and keeps local target data out of its console summary. Supply `--package-root` to verify an extracted or installed package. See [testing](testing.md) for the distinction between adapter tests and real-provider evidence.
 
+For the official profile, generate an independent generic RL78 fixture and require explicit pseudocode degradation:
+
+```bash
+npm run verify:ida -- --fixture --target-format s-record --architecture rl78 \
+  --pseudocode-expectation unavailable --all-functions \
+  --report /absolute/path/to/fixture-report.json
+```
+
+The fixture contains direct calls, conditional and unconditional branches, a string, data references and sparse regions. Its source oracle cites fixed GNU instruction definitions and the RL78 addressing manual. The verifier compares production CLI/MCP results with a separately written direct official-MCP query, validates oracle instruction boundaries and references, checks continuation after invalid queries, exports all retained Evidence and verifies close and original-input preservation. For a caller-supplied firmware, replace `--fixture` with `--target /absolute/path/to/input.s19`; `--all-functions` traverses the current IDA-discovered set without a historical expected count. `--duration-seconds 7200` adds a two-hour wall-clock loop with periodic Evidence export and resource samples. Reports and raw target observations stay in the selected local output directory. The Linux IDA 9.5 / `ida-mcp 20261008.0.1` lane must pass its real workflow and sustained-run gates before a build is frozen; other platforms and versions remain unqualified.
+
+Run `npm run verify:ida:recovery -- --report /absolute/path/to/recovery-report.json` for a controlled closure of the verifier's own MCP transport after a completed read. This separate check uses the production provider and session to prove verified recovery and retention of earlier Evidence. It never closes another client's database. Qualification reports bind the source commit and hashes of the runtime, query resource and packaged skill; freeze only the tested package.
+
 Native verification requires `--second-procedure other_function --second-marker unique_second_body_text`; these options remain optional for the other profiles. The marker must occur in the second function's pseudocode and be absent from the first; the verifier also checks that returning to the first restores its text.
 
 The verifier requires the resolved procedure in both inventory and procedure search, then compares address, assembly, pseudocode, instruction windows and relationship results with the CLI/MCP dossier. Supply `--expected-string known_literal` to check a known positive string inventory/search result and `--expected-xref 0xSOURCE` to check a known reference source address. Choose those oracles independently from the operation under test. Without them, string and xref correctness are listed in `unverified`; valid output shapes alone do not establish those behaviors. Callee parity does not independently establish semantic completeness. Native callee successes must report an explicit truncation marker; missing markers remain protocol failures.
 
-The initial real workflows use stdio registrations for the legacy Windows GUI profile and a Windows x64 headless supervisor with IDA 9.3. The headless workflow has also passed on macOS arm64 with IDA Professional 9.1 (build 9.1.250226) against the same upstream commit `c133c3853faa111a9b00ee615c013b720d0c4acd`, using a source-built arm64 Mach-O fixture; Mach-O C symbols carry a leading underscore, so the procedure name is `_rea_fixture_add`. Streamable HTTP is tested against a loopback MCP fixture with the pinned client SDK; a real IDA HTTP-supervisor workflow remains unverified. Linux headless engine operation, other IDA releases, architectures, and modern attached GUI tools require their corresponding real workflows before support is claimed.
+The initial real workflows use stdio registrations for the legacy Windows GUI profile and a Windows x64 headless supervisor with IDA 9.3. The headless workflow has also passed on macOS arm64 with IDA Professional 9.1 (build 9.1.250226) against the same upstream commit `c133c3853faa111a9b00ee615c013b720d0c4acd`, using a source-built arm64 Mach-O fixture; Mach-O C symbols carry a leading underscore, so the procedure name is `_rea_fixture_add`. Streamable HTTP is tested against a loopback MCP fixture with the pinned client SDK; a real IDA HTTP-supervisor workflow remains unverified. Those community-profile runs do not establish Linux headless operation, other IDA releases or architectures, or modern attached GUI tools. The official profile uses the separate qualification workflow above.
 
 Native Windows verification uses IDA Pro 9.3 with the public two-function fixture and Windows `whoami.exe`, using upstream `c9d15d98e8a143fc74f6e14037c48f63889b6d6c` with a loopback-listener change. It covers production CLI/MCP parity, distinct-function switching, identity and connection cleanup. See the [correctness and performance measurements](https://github.com/morluto/rea/blob/main/experiments/analysis-efficiency/ida-native-windows.md). This follow-up did not run Windows IDA Free or native macOS.
