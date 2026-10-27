@@ -1,5 +1,7 @@
 <div align="center">
 
+For the pinned Linux RL78 compatibility deployment, start with `deployment/README.md` ([online guide](https://github.com/Taiyixcx/rea/blob/experiment/rl78/deployment/README.md)). This is software setup only; use a separate administrator conversation and fresh formal-analysis sessions.
+
 **English** · [简体中文](docs/readme/README_zh.md) · [繁體中文](docs/readme/README_zh-TW.md) · [日本語](docs/readme/README_ja.md) · [한국어](docs/readme/README_ko.md) · [Türkçe](docs/readme/README_tr.md) · [Русский](docs/readme/README_ru.md) · [Tiếng Việt](docs/readme/README_vi.md) · [ไทย](docs/readme/README_th.md) · [Deutsch](docs/readme/README_de.md) · [Español](docs/readme/README_es.md) · [Français](docs/readme/README_fr.md) · [Українська](docs/readme/README_uk.md) · [Polski](docs/readme/README_pl.md) · [Português (Brasil)](docs/readme/README_pt-BR.md) · [العربية](docs/readme/README_ar.md) · [فارسی](docs/readme/README_fa.md) · [Bahasa Indonesia](docs/readme/README_id.md) · [Italiano](docs/readme/README_it.md)
 · [Ελληνικά](docs/readme/README_el.md) · [മലയാളം](docs/readme/README_ml.md)
 
