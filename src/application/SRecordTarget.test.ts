@@ -6,6 +6,10 @@ import { parseBinaryTarget } from "./BinaryTargetResolver.js";
 import { openBinaryInputSchema } from "../contracts/sessionLifecycleInputs.js";
 import { toolContract } from "../contracts/toolContracts.js";
 import { binaryTargetSummary } from "./binary/BinaryTargetSummary.js";
+import {
+  createEvidenceBundle,
+  parseEvidenceBundle,
+} from "../domain/evidenceBundle.js";
 import { createEvidence, evidenceSchema } from "../domain/evidence.js";
 import {
   snapshotMatchesTarget,
@@ -58,6 +62,8 @@ describe("S-record target through public contracts and persistence", () => {
           subject: { ...evidence.subject, format: "elf" },
         }).success,
       ).toBe(false);
+      const bundle = createEvidenceBundle([evidence]);
+      expect(parseEvidenceBundle(bundle).artifacts[0]?.format).toBe("s-record");
       const snapshot = snapshotTarget(target);
       expect(snapshotMatchesTarget(snapshot, target)).toBe(true);
       expect(

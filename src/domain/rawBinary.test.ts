@@ -9,6 +9,11 @@ import {
 } from "./rawBinary.js";
 
 describe("headerless format hints", () => {
+  it("directs an explicit RL78 selection to the S-record lane", () => {
+    expect(rawBinarySelectionError({ architecture: "rl78" })).toBe(
+      "architecture=rl78 requires format=s-record and does not accept entry_point",
+    );
+  });
   it("admits dos-com and raw-binary names only", () => {
     expect(executableFormatHintSchema.safeParse("dos-com").success).toBe(true);
     expect(executableFormatHintSchema.safeParse("raw-binary").success).toBe(

@@ -10,6 +10,11 @@ export const IDA_PROVIDER_IDENTITY = Object.freeze({
   version: "1",
 });
 
+export const HEX_RAYS_PROVIDER_IDENTITY = Object.freeze({
+  ...IDA_PROVIDER_IDENTITY,
+  version: "2",
+});
+
 /** Read-only analyst outcomes supported by the upstream compatibility profiles. */
 export const IDA_OPERATIONS = Object.freeze([
   "list_procedures",
@@ -70,10 +75,11 @@ export const idaCapabilities = (
   mode: "attached" | "headless",
   stdio: boolean,
   native = false,
+  official = false,
 ): readonly CapabilityDescriptor[] =>
   IDA_OPERATIONS.filter((operation) => idaProfileAdmits(operation, mode)).map(
     (operation) => ({
-      provider: IDA_PROVIDER_IDENTITY,
+      provider: official ? HEX_RAYS_PROVIDER_IDENTITY : IDA_PROVIDER_IDENTITY,
       operation,
       ...((mode === "headless" || native) && operation === "procedure_callers"
         ? ({

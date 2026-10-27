@@ -166,6 +166,8 @@ export const rawBinarySelectionError = (input: {
       return "format=raw-binary requires architecture and entry_point";
     return undefined;
   }
+  if (input.architecture === "rl78")
+    return "architecture=rl78 requires format=s-record and does not accept entry_point";
   if (hasArchitecture || hasEntry)
     return "architecture and entry_point apply only with format=raw-binary";
   return undefined;

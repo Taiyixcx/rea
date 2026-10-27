@@ -90,7 +90,7 @@ const subjectSchema = z.discriminatedUnion("format", [
   }),
   subjectBaseSchema.extend({
     format: z.literal("raw-binary"),
-    architecture: z.enum(BINARY_ARCHITECTURES).nullable(),
+    architecture: z.enum(BINARY_ARCHITECTURES).exclude(["rl78"]).nullable(),
   }),
 ]);
 /** Source location attached to an evidence observation. */

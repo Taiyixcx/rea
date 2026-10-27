@@ -96,6 +96,14 @@ explicit path or endpoint and do not need it.
   `inspect_android_package`, then focused Android tools when advertised.
   Archive member inventory still uses the archive route above.
 - Managed PE/CLI assembly: `inspect_managed_artifact`.
+- Explicit RL78 S-record, with a patched server advertising that lane:
+  `open_binary` with the supplied absolute `path`, `format: "s-record"`,
+  `architecture: "rl78"` and `provider_id: "ida"`. This requires the configured
+  official headless `hex-rays` profile. Do not infer CPU from `.s19`, supply a
+  raw-binary `entry_point`, or treat a declared S-record start as a proven
+  function. Discover functions in the current database; see the
+  [compatibility IDA guide](https://github.com/Taiyixcx/rea/blob/patch/srec-rl78-official-ida/docs/ida-provider.md)
+  for profile and loading constraints.
 - Firmware image: `inspect_firmware_regions` when advertised. Use
   `extract_firmware` when extraction is requested, with a caller-selected new
   absolute output directory. These tools use caller-supplied Binwalk/Unblob on
@@ -298,6 +306,21 @@ The agent client can independently require approval. Follow the declared request
 scope and the host's actual access requirements; use the recovery guide for an
 observed client-policy rejection.
 
+For repeated native function analysis, process the discovered set in batches.
+Save completed outputs and periodically export Evidence to a caller-selected
+absolute path. Inspect `facet_availability`: unavailable pseudocode does not
+invalidate verified assembly or callees, and an unavailable empty facet is not
+observed absence. Record a function's explicit error and continue supported
+queries for other functions. Malformed producer data or contradictory identity
+remains a real error; do not reinterpret it as ordinary decompiler absence.
+
+If the engine becomes unavailable, retained Evidence can still be inspected or
+exported. Preserve it and the actual error/cleanup state before attempting a
+lifecycle change. The official IDA adapter may perform one verified read-only
+recovery; do not add repeated retries or reopen the target while cleanup remains
+unverified. Export the completed ledger before closing a session. Closing and
+opening a new investigation is not a substitute for retaining prior results.
+
 ## Plan broader investigations
 
 For requests that span multiple features or subsystems, use a staged workflow:
@@ -351,5 +374,6 @@ as complete while required questions remain open.
 
 Explain findings in plain language and tie them to returned evidence. When the
 user asks to build something, use normal coding tools and separate observed
-behavior from design choices. Close an opened native session with
-`close_binary` when the investigation is complete.
+behavior from design choices. Save outputs and export the retained Evidence
+before closing an opened native session with `close_binary` when the
+investigation is complete. Report incomplete cleanup when closing fails.
