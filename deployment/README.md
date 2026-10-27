@@ -9,7 +9,8 @@
 ```sh
 git clone --branch experiment/rl78 --single-branch https://github.com/Taiyixcx/rea.git rea-rl78
 cd rea-rl78
-git rev-parse HEAD
+REA_SOURCE_COMMIT=$(git rev-parse HEAD)
+git switch --detach "$REA_SOURCE_COMMIT"
 ```
 
 记录实际下载的完整提交；本次部署后固定在该提交，不在正式运行期间 pull 或换版本。默认 main 是另一条上游版本线，不是本兼容部署入口。
